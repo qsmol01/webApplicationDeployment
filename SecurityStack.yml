@@ -1,0 +1,42 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cloudformation template to create all security groups and roles
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Select a VPC with Subnets covering 2 Availability zone at least.
+    MinLength: 1
+Resources:
+    LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        -
+          PolicyName: "lambdaPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action: "s3:GetObject"
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action: "cloudwatch:PutMetricData"
+                Resource: "*"
+Outputs:
+  LambdaRole:
+    Value: !GetAtt 'LambdaRole.Arn'
+    Description: Role to excute Lambda function.
+    Export: 
+      Name: !Sub "${AWS::StackName}-LambdaRole"
