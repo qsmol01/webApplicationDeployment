@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create a custom metric by lambda python for autoscale group.
+Parameters:
+  AutoScalingGroupName:
+    Type: String
+    Description: Name of an existing autoscale group.
+  SecurityStack:
+    Type: String
+    Description: Name of an existing stack that contains role to excute lambda function.
+  MetricName:
+    Type: String
+    Description: Name of the custom metric.
+  Namespace:
+    Type: String
+    Description: Namespace for the metric in cloudwatch.
+  Threshold:
+    Type: Number
+    Description: Threshold value to create alarm.
+  S3Bucket:
+    Type: String
+    Description: S3 bucket that contains Lambda function zip file.
+  S3Key:
+    Type: String
+    Description: S3 key that locates Lambda function zip file.
+Resources:
+  customMetricLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref S3Bucket
+        S3Key: !Ref S3Key
+      Environment:
+        Variables:
+          MetricName: !Ref MetricName
+          Namespace: !Ref Namespace
+      Handler: cloudwatch_putmetric_function.lambda_handler
+      Role: 
+        Fn::ImportValue: !Sub "${SecurityStack}-LambdaRole"
+      Runtime: python2.7
+  sidekiqMonitor:
+    Type: AWS::Events::Rule
+    Properties:
+      ScheduleExpression: cron(0/5 * * * ? *)
+      Targets: 
+        - Arn: !GetAtt customMetricLambda.Arn
+          Id: customMetricLambda
+  permissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:*
+      FunctionName: !Ref customMetricLambda
+      Principal: events.amazonaws.com
+  autoScaleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref ScaleUpPolicy
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 1
+      MetricName: !Ref MetricName
+      Namespace: !Ref Namespace
+      Period: 300
+      Statistic: Maximum
+      Threshold: !Ref Threshold
+      OKActions:
+        - !Ref ScaleDownPolicy
+  ScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref AutoScalingGroupName
+      Cooldown: '1800'
+      ScalingAdjustment: '2'
+  ScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref AutoScalingGroupName
+      Cooldown: '1800'
+      ScalingAdjustment: '-2'
